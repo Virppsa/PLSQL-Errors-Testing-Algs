@@ -1,0 +1,52 @@
+CREATE OR REPLACE PACKAGE SORT_PACKAGE AS
+ --Kokteilinis paieškos algoritmas
+    FUNCTION DOUBLESELECTIONSORT(
+        ARR IN NUMBER_TABLE.NUMBERTABLE
+    ) RETURN NUMBER_TABLE.NUMBERTABLE;
+END SORT_PACKAGE;
+/
+
+CREATE OR REPLACE PACKAGE BODY SORT_PACKAGE AS
+ --Kokteilinis paieškos algoritmas
+    FUNCTION DOUBLESELECTIONSORT(
+        ARR IN NUMBER_TABLE.NUMBERTABLE
+    ) RETURN NUMBER_TABLE.NUMBERTABLE IS
+        TMP          NUMBER;
+        MIN_INDEX    PLS_INTEGER;
+        MAX_INDEX    PLS_INTEGER;
+        SORTED_ARRAY NUMBER_TABLE.NUMBERTABLE := ARR;
+    BEGIN
+        FOR I IN 1..SORTED_ARRAY.COUNT/2 LOOP
+            MIN_INDEX := I;
+            MAX_INDEX := SORTED_ARRAY.COUNT-I+1;
+            FOR J IN I..SORTED_ARRAY.COUNT-I+1 LOOP
+                IF SORTED_ARRAY(J) < SORTED_ARRAY(MIN_INDEX) THEN
+                    MIN_INDEX := J;
+                END IF;
+                IF SORTED_ARRAY(J) > SORTED_ARRAY(MAX_INDEX) THEN
+                    MAX_INDEX := J;
+                END IF;
+            END LOOP;
+            TMP := SORTED_ARRAY(MIN_INDEX);
+            SORTED_ARRAY(MIN_INDEX) := SORTED_ARRAY(I);
+            SORTED_ARRAY(I) := TMP;
+            IF MAX_INDEX = I THEN
+                MAX_INDEX := MIN_INDEX;
+            END IF;
+            TMP := SORTED_ARRAY(MAX_INDEX);
+            SORTED_ARRAY(MAX_INDEX) := SORTED_ARRAY(SORTED_ARRAY.COUNT-I+1);
+            SORTED_ARRAY(SORTED_ARRAY.COUNT-I+1) := TMP;
+        END LOOP;
+        RETURN SORTED_ARRAY;
+ -- Tikriname ar fore netycia nebandome rast neegzistuojacio elemento
+    EXCEPTION
+        WHEN ACCESS_INTO_NULL OR NO_DATA_FOUND OR COLLECTION_IS_NULL THEN --nesamone reikia kitus
+            G_ERROR_HANDLING.LOG_ERROR();
+            RAISE;
+    END DOUBLESELECTIONSORT;
+END SORT_PACKAGE;
+/
+
+-- SELECT *
+-- FROM USER_ERRORS
+-- WHERE NAME = 'RANDOM_SORT_PACKAGE';

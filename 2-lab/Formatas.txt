@@ -1,0 +1,145 @@
+SPOOL /USERS/GRETAVIRPSAITE/PL_SQL/RESULTS_LAB3.TXT;
+SET SERVEROUTPUT ON;
+
+DECLARE
+    --Padarau naują tipą (composite data type). Čia mano array realiai, kur dėsiu skaičius, tai tipas skaitinis
+    TYPE NumberTable IS TABLE OF NUMBER INDEX BY PLS_INTEGER;
+    numbers NumberTable; --Čia eis mano paprasti skaičiai
+    sortedNumbers NumberTable; --Čia eis mano surūšiuoti skaičiai
+
+    -- Funkcija skaičių generavimui ------------------------------------------------------
+    FUNCTION GenerateRandomNumber RETURN NUMBER IS
+    BEGIN
+        RETURN TRUNC(DBMS_RANDOM.VALUE(1, 9)); --Su TRUNC, nes DBMS_RANDOM.VALUE generuoja su kableliu skaičius
+    END GenerateRandomNumber;
+
+    --Sudedam į array
+    PROCEDURE GenerateNumbers(n IN NUMBER) IS
+    BEGIN
+        FOR i IN 1..n LOOP
+            numbers(i) := GenerateRandomNumber; --Sudedam į arrays suindeksuotus skaičius
+            sortedNumbers(i) := numbers(i); --Dėsim vėliau surūšiuotus
+        END LOOP;
+    END GenerateNumbers;
+
+    --Atspausdinu skaičius, kurie sudėti array
+    PROCEDURE PrintNumbers(arr IN NumberTable) IS
+        --Dedam į stringą mūsų norimus atspausdinti skaičius
+        output_line VARCHAR2(4000) := ''; --čia gal ir mažesnį galima būtų imti
+    BEGIN
+        FOR i IN arr.FIRST..arr.LAST LOOP --Bandome paimti i'tajį elementą iš sąrašo nuo pirmo iki paskutinio
+            output_line := output_line || arr(i) || ' | ';
+        END LOOP;
+        DBMS_OUTPUT.PUT_LINE('| ' || output_line);
+    END PrintNumbers;
+
+    --Mano Double Selection Sort - arba smagiau Cocktail Sort :))-------------------------------
+    PROCEDURE DoubleSelectionSort(arr IN OUT NumberTable) IS
+        tmp NUMBER;
+        --kur eis maži ir dideli skaičiai (kairė/dešinė)
+        min_index PLS_INTEGER;
+        max_index PLS_INTEGER;
+    BEGIN
+        FOR i IN 1..arr.COUNT/2 LOOP --skaičiuojame iki vidurio
+            min_index := i;
+            max_index := i;
+            FOR j IN i..arr.COUNT-i+1 LOOP --pajudinam paiešką į kitą poz (ne ten kur maži ar dideli sk)
+                IF arr(j) < arr(min_index) THEN --dedam į kairį šoną prie mažų
+                    min_index := j;
+                END IF;
+                IF arr(j) > arr(max_index) THEN --dedam į dešinį šoną prie didelių
+                    max_index := j;
+                END IF;
+            END LOOP;
+
+            --Čia metam į priekį mažiausią
+            tmp := arr(min_index); --Temp value (laikyti prieš nusprendžiant kur dėti)
+            arr(min_index) := arr(i);
+            arr(i) := tmp;
+
+            --Tikrinam ar ne blogai numetėm auksčiausią skaičių pabaigoje, kai mažiausias jau kairėje
+            IF max_index = arr.COUNT-i+1 THEN
+                max_index := min_index;
+            END IF;
+
+            --Čia į galą numetam didžiausią
+            tmp := arr(max_index);
+            arr(max_index) := arr(arr.COUNT-i+1);
+            arr(arr.COUNT-i+1) := tmp;
+        END LOOP;
+    END DoubleSelectionSort;
+
+--Linear search --------------------------------------------------------------------
+    --Target yra mano ieškomas skaičius
+    FUNCTION LinearSearch(arr IN NumberTable, target IN NUMBER) RETURN PLS_INTEGER IS
+        iterations PLS_INTEGER := 0; --Sakėt berods, kad greitesnis ir mažiau vietos užima, tai panaudojau
+    BEGIN
+        FOR i IN arr.FIRST..arr.LAST LOOP --Paprastas cikliukas - einam pro kiekvieną skaičių
+            iterations := iterations + 1;
+
+            IF arr(i) = target THEN
+                RETURN iterations;
+            END IF;
+
+        END LOOP;
+        RETURN iterations;
+    END LinearSearch;
+
+--Binary search ---------------------------------------------------------------------
+    FUNCTION BinarySearch(arr IN NumberTable, target IN NUMBER) RETURN PLS_INTEGER IS
+        low PLS_INTEGER := arr.FIRST;
+        high PLS_INTEGER := arr.LAST;
+        mid PLS_INTEGER;
+        iterations PLS_INTEGER := 0;
+    BEGIN
+        WHILE low <= high LOOP --Kad neliktų 1 sk, nes jei tik vienas,tai turėtų palikti 1 iteraciją, vadinasi radom savo sk 
+            iterations := iterations + 1;
+            mid := (low + high) / 2; --Formulė kaip eiti toliau, kai 
+
+            IF arr(mid) < target THEN
+                low := mid + 1;
+            ELSIF arr(mid) > target THEN
+                high := mid - 1;
+            ELSE
+                RETURN iterations;
+            END IF;
+
+        END LOOP;
+        RETURN iterations;
+    END BinarySearch;
+
+-- Atprintina mano visas norimas reikšmes po skaičiavimų, palygina kuris it sk didesnis --------
+    PROCEDURE SearchAndPrintIterations IS
+        totalIterationsLinear PLS_INTEGER := 0;
+        totalIterationsBinary PLS_INTEGER := 0;
+        avgIterationsLinear NUMBER; --Naudoju NUMBER, nes reikia tiksliau paskaičiuoti (bent manau taip statistiškai tiksliau)
+        avgIterationsBinary NUMBER;
+    BEGIN
+        FOR i IN numbers.FIRST..numbers.LAST LOOP
+            totalIterationsLinear := totalIterationsLinear + LinearSearch(sortedNumbers, numbers(i));
+            totalIterationsBinary := totalIterationsBinary + BinarySearch(sortedNumbers, numbers(i));
+        END LOOP;
+
+        avgIterationsLinear := totalIterationsLinear / numbers.COUNT;
+        avgIterationsBinary := totalIterationsBinary / numbers.COUNT;
+
+        DBMS_OUTPUT.PUT_LINE('Avg - Linear Search: ' || TO_CHAR(avgIterationsLinear));
+        DBMS_OUTPUT.PUT_LINE('Avg - Binary Search: ' || TO_CHAR(avgIterationsBinary));
+        DBMS_OUTPUT.PUT_LINE('Palyginimas: Linear Search reikia ' || TO_CHAR(avgIterationsLinear - avgIterationsBinary) || ' daugiau iteracijų (by average) nei Binry Search.');
+    END SearchAndPrintIterations;
+
+BEGIN
+    --Pasirinkau 20 skaičių (manau ir 10 u=tenka, tiesiog manau aiškiau matosi su didesniu arr)
+    GenerateNumbers(20);
+    DBMS_OUTPUT.PUT_LINE('Nesurūšiuotas sąrašas:');
+    PrintNumbers(numbers);
+
+    DoubleSelectionSort(sortedNumbers);
+    DBMS_OUTPUT.PUT_LINE('Surūšiuotas sąrašas:');
+    PrintNumbers(sortedNumbers);
+
+    --Atspausdinu likusius rezultatus 
+    SearchAndPrintIterations;
+END;
+/
+SPOOL OFF;

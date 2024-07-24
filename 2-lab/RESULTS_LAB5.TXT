@@ -1,0 +1,182 @@
+SQL> SET SERVEROUTPUT ON;
+SQL> DECLARE
+  2   --Padarau naują tipą (composite data type). Čia mano array realiai, kur dėsiu skaičius, tai tipas skaitinis
+  3      TYPE NUMBERTABLE IS
+  4          TABLE OF NUMBER(3) INDEX BY PLS_INTEGER; --Taip ir galima pažymėti dydį
+  5      NUMBERS        NUMBERTABLE; --Čia eis mano paprasti skaičiai
+  6      SORTED_NUMBERS NUMBERTABLE; --Čia eis mano surūšiuoti skaičiai
+  7      FUNCTION GENERATE_NUMBERS(
+  8          N IN NUMBER
+  9      ) RETURN NUMBERTABLE IS
+  10          NUMBERS NUMBERTABLE;
+  11      BEGIN
+  12          FOR I IN 1..N LOOP
+  13              NUMBERS(I) := GENERATE_RANDOM_NUMER;
+  14   --Sudedam į arrays suindeksuotus skaičius
+  15   -- sortedNumbers(i) := numbers(i); --Dėsim vėliau surūšiuotus
+  16          END LOOP;
+  17   -- SORTEDNUMBERS := NUMBERS; --vietoj 22
+  18          RETURN NUMBERS;
+  19      END; --Atspausdinu skaičius, kurie sudėti array
+  20   --
+  21      PROCEDURE PRINTNUMBERS(
+  22          ARR IN NUMBERTABLE
+  23      ) IS
+  24   --Dedam į stringą mūsų norimus atspausdinti skaičius
+  25          OUTPUT_LINE VARCHAR2(4000) := ''; --čia gal ir mažesnį galima būtų imti
+  26      BEGIN
+  27          FOR I IN ARR.FIRST..ARR.LAST LOOP --Bandome paimti i'tajį elementą iš sąrašo nuo pirmo iki paskutinio
+  28              OUTPUT_LINE := OUTPUT_LINE
+  29                  || ARR(I)
+  30                  || ' | ';
+  31          END LOOP;
+  32          DBMS_OUTPUT.PUT_LINE('| '
+  33              || OUTPUT_LINE);
+  34      END PRINTNUMBERS; --Mano Double Selection Sort - arba smagiau Cocktail Sort :))-------------------------------
+  35      FUNCTION DOUBLESELECTIONSORT(
+  36          ARR IN NUMBERTABLE
+  37      ) RETURN NUMBERTABLE IS
+  38          TMP          NUMBER;
+  39   --kur eis maži ir dideli skaičiai (kairė/dešinė)
+  40          MIN_INDEX    PLS_INTEGER;
+  41          MAX_INDEX    PLS_INTEGER;
+  42          SORTED_ARRAY NUMBERTABLE;
+  43      BEGIN
+  44          FOR I IN 1..ARR.COUNT/2 LOOP --skaičiuojame iki vidurio
+  45              MIN_INDEX := I;
+  46              MAX_INDEX := I;
+  47              FOR J IN I..ARR.COUNT-I+1 LOOP --pajudinam paiešką į kitą poz (ne ten kur maži ar dideli sk)
+  48                  IF ARR(J) < ARR(MIN_INDEX) THEN --dedam į kairį šoną prie mažų
+  49                      MIN_INDEX := J;
+  50                  END IF;
+  51                  IF ARR(J) > ARR(MAX_INDEX) THEN --dedam į dešinį šoną prie didelių
+  52                      MAX_INDEX := J;
+  53                  END IF;
+  54              END LOOP;
+  55   --Čia metam į priekį mažiausią
+  56              TMP := ARR(MIN_INDEX); --Temp value (laikyti prieš nusprendžiant kur dėti)
+  57              ARR(MIN_INDEX) := ARR(I);
+  58              ARR(I) := TMP;
+  59   --Tikrinam ar ne blogai numetėm auksčiausią skaičių pabaigoje, kai mažiausias jau kairėje
+  60              IF MAX_INDEX = ARR.COUNT-I+1 THEN
+  61                  MAX_INDEX := MIN_INDEX;
+  62              END IF;
+  63   --Čia į galą numetam didžiausią
+  64              TMP := ARR(MAX_INDEX);
+  65              ARR(MAX_INDEX) := ARR(ARR.COUNT-I+1);
+  66              ARR(ARR.COUNT-I+1) := TMP;
+  67          END LOOP;
+  68          RETURN ARR;
+  69      END; --Linear search --------------------------------------------------------------------
+  70   --Target yra mano ieškomas skaičius
+  71      FUNCTION LINEARSEARCH(
+  72          ARR IN NUMBERTABLE,
+  73          TARGET IN NUMBER
+  74      ) RETURN PLS_INTEGER IS
+  75          ITERATIONS PLS_INTEGER := 0; --Sakėt berods, kad greitesnis ir mažiau vietos užima, tai panaudojau
+  76      BEGIN
+  77          FOR I IN ARR.FIRST..ARR.LAST LOOP --Paprastas cikliukas - einam pro kiekvieną skaičių
+  78              ITERATIONS := ITERATIONS + 1;
+  79              IF ARR(I) = TARGET THEN
+  80                  RETURN ITERATIONS;
+  81              END IF;
+  82          END LOOP;
+  83          RETURN ITERATIONS;
+  84      END LINEARSEARCH; --Binary search ---------------------------------------------------------------------
+  85      FUNCTION BINARYSEARCH(
+  86          ARR IN NUMBERTABLE,
+  87          TARGET IN NUMBER
+  88      ) RETURN PLS_INTEGER IS
+  89          LOW        PLS_INTEGER := ARR.FIRST;
+  90          HIGH       PLS_INTEGER := ARR.LAST;
+  91          MID        PLS_INTEGER;
+  92          ITERATIONS PLS_INTEGER := 0;
+  93      BEGIN
+  94          WHILE LOW <= HIGH LOOP --Kad neliktų 1 sk, nes jei tik vienas,tai turėtų palikti 1 iteraciją, vadinasi radom savo sk
+  95              ITERATIONS := ITERATIONS + 1;
+  96              MID := (LOW + HIGH) / 2; --Formulė kaip eiti toliau, kai
+  97              IF ARR(MID) < TARGET THEN
+  98                  LOW := MID + 1;
+  99              ELSIF ARR(MID) > TARGET THEN
+  100                  HIGH := MID - 1;
+  101              ELSE
+  102                  RETURN ITERATIONS;
+  103              END IF;
+  104          END LOOP;
+  105          RETURN ITERATIONS;
+  106      END BINARYSEARCH; -- Atprintina mano visas norimas reikšmes po skaičiavimų, palygina kuris it sk didesnis --------
+  107      PROCEDURE SEARCHANDPRINTITERATIONS IS
+  108          TOTALITERATIONSLINEAR    PLS_INTEGER := 0;
+  109          TOTALITERATIONSBINARY    PLS_INTEGER := 0;
+  110          AVGITERATIONSLINEAR      NUMBER; --Naudoju NUMBER, nes reikia tiksliau paskaičiuoti (bent manau taip statistiškai tiksliau)
+  111          AVGITERATIONSBINARY      NUMBER;
+  112          LINEAR_SEARCH_ITERATIONS PLS_INTEGER;
+  113          BINARY_SEARCH_ITERATIONS PLS_INTEGER;
+  114      BEGIN
+  115          FOR I IN NUMBERS.FIRST..NUMBERS.LAST LOOP
+  116   --
+  117   -- Guaname linear search iteraciju kiek
+  118              LINEAR_SEARCH_ITERATIONS := LINEARSEARCH(SORTED_NUMBERS, NUMBERS(I));
+  119              TOTALITERATIONSLINEAR := TOTALITERATIONSLINEAR + LINEAR_SEARCH_ITERATIONS;
+  120              DBMS_OUTPUT.PUT_LINE('Number: '
+  121                  || TO_CHAR(NUMBERS(I))
+  122                  || ' found in: '
+  123                  || TO_CHAR(LINEAR_SEARCH_ITERATIONS)
+  124                  || ' iterations with linear search.' );
+  125   --
+  126   -- Guaname binary search iteraciju kieki
+  127              BINARY_SEARCH_ITERATIONS := BINARYSEARCH(SORTED_NUMBERS, NUMBERS(I));
+  128              TOTALITERATIONSBINARY := TOTALITERATIONSBINARY + BINARY_SEARCH_ITERATIONS;
+  129              DBMS_OUTPUT.PUT_LINE('Number: '
+  130                  || TO_CHAR(NUMBERS(I))
+  131                  || ' found in: '
+  132                  || TO_CHAR(BINARY_SEARCH_ITERATIONS)
+  133                  || ' iterations with binary search.' );
+  134          END LOOP;
+  135          AVGITERATIONSLINEAR := TOTALITERATIONSLINEAR / NUMBERS.COUNT;
+  136          AVGITERATIONSBINARY := TOTALITERATIONSBINARY / NUMBERS.COUNT;
+  137          DBMS_OUTPUT.PUT_LINE('Avg - Linear Search: '
+  138              || TO_CHAR(AVGITERATIONSLINEAR));
+  139          DBMS_OUTPUT.PUT_LINE('Avg - Binary Search: '
+  140              || TO_CHAR(AVGITERATIONSBINARY));
+  141          DBMS_OUTPUT.PUT_LINE('Palyginimas: Linear Search reikia '
+  142              || TO_CHAR(AVGITERATIONSLINEAR - AVGITERATIONSBINARY)
+  143              || ' daugiau iteracijų (by average) nei Binry Search.');
+  144      END SEARCHANDPRINTITERATIONS; -- Procedura kuri atspausdina iteracijas
+  145  BEGIN
+  146   --Pasirinkau 20 skaičių (manau ir 10 u=tenka, tiesiog manau aiškiau matosi su didesniu arr)
+  147      NUMBERS := GENERATE_NUMBERS(10);
+  148      DBMS_OUTPUT .PUT_LINE('Nesurūšiuotas sąrašas:');
+  149      PRINTNUMBERS (NUMBERS);
+  150      SORTED_NUMBERS := NUMBERS;
+  151      SORTED_NUMBERS := DOUBLESELECTIONSORT (NUMBERS);
+  152      DBMS_OUTPUT .PUT_LINE('Surūšiuotas sąrašas:');
+  153      PRINTNUMBERS (SORTED_NUMBERS);
+  154      SEARCHANDPRINTITERATIONS;
+  155  END;
+  156  /
+
+--Tikrinam ar ne blogai numetėm auksčiausią skaičių pabaigoje, kai mažiausias
+jau kairėje
+*
+
+ERROR at line 83:
+ORA-06550: line 57, column 13:
+PLS-00363: expression 'ARR(MIN_INDEX)' cannot be used as an assignment target
+ORA-06550: line 57, column 13:
+PL/SQL: Statement ignored
+ORA-06550: line 58, column 13:
+PLS-00363: expression 'ARR(I)' cannot be used as an assignment target
+ORA-06550: line 58, column 13:
+PL/SQL: Statement ignored
+ORA-06550: line 65, column 13:
+PLS-00363: expression 'ARR(MAX_INDEX)' cannot be used as an assignment target
+ORA-06550: line 65, column 13:
+PL/SQL: Statement ignored
+ORA-06550: line 66, column 13:
+PLS-00363: expression 'ARR(+(-(COUNT(ARR), I), 1))' cannot be used as an
+assignment target
+ORA-06550: line 66, column 13:
+PL/SQL: Statement ignored
+SQL> SPOOL OFF;
+

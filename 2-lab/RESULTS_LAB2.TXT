@@ -1,0 +1,195 @@
+SQL> SET SERVEROUTPUT ON;
+ERROR at line 3:
+Not connected
+SQL> DECLARE
+  2      TYPE NUMBERTABLE IS
+  3          TABLE OF NUMBER INDEX BY PLS_INTEGER;
+  4      NUMBERS       NUMBERTABLE;
+  5      SORTEDNUMBERS NUMBERTABLE;
+  6   -- Function to generate a single random number
+  7      FUNCTION GENERATERANDOMNUMBER RETURN NUMBER IS
+  8      BEGIN
+  9          RETURN TRUNC(DBMS_RANDOM.VALUE(1, 9)); -- Generates numbers from 1 to 9
+  10      END GENERATERANDOMNUMBER; -- Procedure to generate n random numbers
+  11      PROCEDURE GENERATENUMBERS(
+  12          N IN NUMBER
+  13      ) IS
+  14      BEGIN
+  15          FOR I IN 1..N LOOP
+  16              NUMBERS(I) := GENERATERANDOMNUMBER;
+  17              SORTEDNUMBERS(I) := NUMBERS(I); -- Copy to sortedNumbers for later sorting
+  18          END LOOP;
+  19      END GENERATENUMBERS; -- Procedure to print numbers from the array
+  20      PROCEDURE PRINTNUMBERS(
+  21          ARR IN NUMBERTABLE
+  22      ) IS
+  23          OUTPUT_LINE VARCHAR2(4000) := '';
+  24      BEGIN
+  25          FOR I IN 1..ARR.COUNT LOOP
+  26              OUTPUT_LINE := OUTPUT_LINE
+  27                  || ARR(I)
+  28                  || ' | ';
+  29          END LOOP;
+  30          DBMS_OUTPUT.PUT_LINE('| '
+  31              || OUTPUT_LINE);
+  32      END PRINTNUMBERS; -- Double Selection Sort Algorithm
+  33      PROCEDURE DOUBLESELECTIONSORT(
+  34          ARR IN OUT NUMBERTABLE
+  35      ) IS
+  36          TMP       NUMBER;
+  37          MIN_INDEX PLS_INTEGER;
+  38          MAX_INDEX PLS_INTEGER;
+  39          N         PLS_INTEGER := ARR.COUNT;
+  40      BEGIN
+  41          FOR I IN 1..N/2 LOOP
+  42              MIN_INDEX := I;
+  43              MAX_INDEX := I;
+  44              FOR J IN I..N-I+1 LOOP
+  45                  IF ARR(J) < ARR(MIN_INDEX) THEN
+  46                      MIN_INDEX := J;
+  47                  END IF;
+  48                  IF ARR(J) > ARR(MAX_INDEX) THEN
+  49                      MAX_INDEX := J;
+  50                  END IF;
+  51              END LOOP;
+  52   -- Swap min element with start
+  53              TMP := ARR(MIN_INDEX);
+  54              ARR(MIN_INDEX) := ARR(I);
+  55              ARR(I) := TMP;
+  56              IF MAX_INDEX = I THEN
+  57                  MAX_INDEX := MIN_INDEX;
+  58              END IF;
+  59   -- Swap max element with end
+  60              TMP := ARR(MAX_INDEX);
+  61              ARR(MAX_INDEX) := ARR(N-I+1);
+  62              ARR(N-I+1) := TMP;
+  63          END LOOP;
+  64      END DOUBLESELECTIONSORT; -- Linear Search Algorithm
+  65      FUNCTION LINEARSEARCH(
+  66          ARR IN NUMBERTABLE,
+  67          TARGET IN NUMBER
+  68      ) RETURN PLS_INTEGER IS
+  69          ITERATIONS PLS_INTEGER := 0;
+  70      BEGIN
+  71          FOR I IN 1..ARR.COUNT LOOP
+  72              ITERATIONS := ITERATIONS + 1;
+  73              IF ARR(I) = TARGET THEN
+  74                  RETURN ITERATIONS; -- Found target, return iterations
+  75              END IF;
+  76          END LOOP;
+  77          RETURN 0; -- Target not found
+  78      END LINEARSEARCH; -- Procedure to perform linear search for each element of the original array in the sorted array
+  79      PROCEDURE SEARCHANDPRINTITERATIONS IS
+  80          TOTALITERATIONS PLS_INTEGER := 0;
+  81          AVGITERATIONS   NUMBER := 0;
+  82      BEGIN
+  83          DBMS_OUTPUT.PUT_LINE('Linear Search Iterations for each element:');
+  84          FOR I IN 1..NUMBERS.COUNT LOOP
+  85              DECLARE
+  86                  ITERATIONS PLS_INTEGER;
+  87              BEGIN
+  88                  ITERATIONS := LINEARSEARCH(SORTEDNUMBERS, NUMBERS(I));
+  89                  DBMS_OUTPUT.PUT_LINE('Element '
+  90                      || NUMBERS(I)
+  91                      || ' found in '
+  92                      || ITERATIONS
+  93                      || ' iterations.');
+  94                  TOTALITERATIONS := TOTALITERATIONS + ITERATIONS;
+  95              END;
+  96          END LOOP;
+  97   -- Compute the average number of iterations
+  98          IF NUMBERS.COUNT > 0 THEN
+  99              AVGITERATIONS := TOTALITERATIONS / NUMBERS.COUNT;
+  100              DBMS_OUTPUT.PUT_LINE('Average iterations for Linear Search: '
+  101                  || TO_CHAR(AVGITERATIONS));
+  102          ELSE
+  103              DBMS_OUTPUT.PUT_LINE('No elements to search.');
+  104          END IF;
+  105      END SEARCHANDPRINTITERATIONS; ---------------------BINARY SEARCH------------------------------------
+  106   -- Function for Binary Search algorithm
+  107      FUNCTION BINARYSEARCH(
+  108          ARR IN NUMBERTABLE,
+  109          TARGET IN NUMBER
+  110      ) RETURN PLS_INTEGER IS
+  111          LOW        PLS_INTEGER := ARR.FIRST;
+  112          HIGH       PLS_INTEGER := ARR.LAST;
+  113          MID        PLS_INTEGER;
+  114          ITERATIONS PLS_INTEGER := 0;
+  115      BEGIN
+  116          WHILE LOW <= HIGH LOOP
+  117              ITERATIONS := ITERATIONS + 1;
+  118              MID := TRUNC((LOW + HIGH) / 2);
+  119              IF ARR(MID) < TARGET THEN
+  120                  LOW := MID + 1;
+  121              ELSIF ARR(MID) > TARGET THEN
+  122                  HIGH := MID - 1;
+  123              ELSE
+  124                  RETURN ITERATIONS; -- Element found
+  125              END IF;
+  126          END LOOP;
+  127          RETURN ITERATIONS; -- Element not found, return iterations anyway for consistency
+  128      END BINARYSEARCH; -----------more------
+  129   -- Procedure to perform searches and print iterations
+  130      PROCEDURE SEARCHANDPRINTITERATIONS IS
+  131          TOTALITERATIONSLINEAR PLS_INTEGER := 0;
+  132          TOTALITERATIONSBINARY PLS_INTEGER := 0;
+  133          AVGITERATIONSLINEAR   NUMBER := 0;
+  134          AVGITERATIONSBINARY   NUMBER := 0;
+  135      BEGIN
+  136          DBMS_OUTPUT.PUT_LINE('Search Iterations for each element:');
+  137          FOR I IN 1..NUMBERS.COUNT LOOP
+  138   -- Linear Search
+  139              DECLARE
+  140                  ITERATIONSLINEAR PLS_INTEGER;
+  141                  ITERATIONSBINARY PLS_INTEGER;
+  142              BEGIN
+  143                  ITERATIONSLINEAR := LINEARSEARCH(SORTEDNUMBERS, NUMBERS(I));
+  144                  TOTALITERATIONSLINEAR := TOTALITERATIONSLINEAR + ITERATIONSLINEAR;
+  145   -- Binary Search
+  146                  ITERATIONSBINARY := BINARYSEARCH(SORTEDNUMBERS, NUMBERS(I));
+  147                  TOTALITERATIONSBINARY := TOTALITERATIONSBINARY + ITERATIONSBINARY;
+  148   -- Output for each element
+  149                  DBMS_OUTPUT.PUT_LINE('Element '
+  150                      || NUMBERS(I)
+  151                      || ' found in Linear: '
+  152                      || ITERATIONSLINEAR
+  153                      || ' iterations, Binary: '
+  154                      || ITERATIONSBINARY
+  155                      || ' iterations.');
+  156              END;
+  157          END LOOP;
+  158   -- Compute the averages
+  159          IF NUMBERS.COUNT > 0 THEN
+  160              AVGITERATIONSLINEAR := TOTALITERATIONSLINEAR / NUMBERS.COUNT;
+  161              AVGITERATIONSBINARY := TOTALITERATIONSBINARY / NUMBERS.COUNT;
+  162   -- Output the averages
+  163              DBMS_OUTPUT.PUT_LINE('Average iterations for Linear Search: '
+  164                  || TO_CHAR(AVGITERATIONSLINEAR));
+  165              DBMS_OUTPUT.PUT_LINE('Average iterations for Binary Search: '
+  166                  || TO_CHAR(AVGITERATIONSBINARY));
+  167   -- Comparison
+  168              DBMS_OUTPUT.PUT_LINE('Comparison: Linear Search required '
+  169                  || TO_CHAR(AVGITERATIONSLINEAR - AVGITERATIONSBINARY)
+  170                  || ' more iterations on average than Binary Search.');
+  171          ELSE
+  172              DBMS_OUTPUT.PUT_LINE('No elements to search.');
+  173          END IF;
+  174      END SEARCHANDPRINTITERATIONS;
+  175  BEGIN
+  176   -- Generate and print 20 random numbers
+  177      GENERATENUMBERS(20);
+  178      DBMS_OUTPUT.PUT_LINE('Unsorted Numbers:');
+  179      PRINTNUMBERS(NUMBERS);
+  180   -- Sort and print the sorted numbers
+  181      DOUBLESELECTIONSORT(SORTEDNUMBERS);
+  182      DBMS_OUTPUT.PUT_LINE('Sorted Numbers:');
+  183      PRINTNUMBERS(SORTEDNUMBERS);
+  184   -- Perform linear search for each element and print iterations
+  185      SEARCHANDPRINTITERATIONS;
+  186  END;
+  187  /
+
+ERROR at line 5:
+Not connected
+SQL> SPOOL OFF;
+
