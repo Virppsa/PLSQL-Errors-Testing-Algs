@@ -1,0 +1,568 @@
+SQL> DECLARE
+  2   --Padarau naują tipą (composite data type). Čia mano array realiai, kur dėsiu skaičius, tai tipas skaitinis
+  3      TYPE NUMBERTABLE IS
+  4          TABLE OF NUMBER(3) INDEX BY PLS_INTEGER; --Taip ir galima pažymėti dydį
+  5      NUMBERS                  NUMBERTABLE; --Čia eis mano paprasti skaičiai
+  6      SORTEDNUMBERS            NUMBERTABLE; --Čia eis mano surūšiuoti skaičiai
+  7   -- Funkcija skaičių generavimui ------------------------------------------------------
+  8      FUNCTION GENERATERANDOMNUMBER RETURN NUMBER IS
+  9      BEGIN
+  10          RETURN DBMS_RANDOM.VALUE(1, 100); --Su TRUNC, nes DBMS_RANDOM.VALUE generuoja su kableliu skaičius (nereikia)
+  11      END GENERATERANDOMNUMBER; --Sudedam į array
+  12      PROCEDURE GENERATENUMBERS(
+  13          N IN NUMBER
+  14      ) IS
+  15      BEGIN
+  16          FOR I IN 1..N LOOP
+  17              NUMBERS(I) := GENERATERANDOMNUMBER; --Sudedam į arrays suindeksuotus skaičius
+  18   -- sortedNumbers(i) := numbers(i); --Dėsim vėliau surūšiuotus
+  19          END LOOP;
+  20          SORTEDNUMBERS := NUMBERS; --vietoj 22
+  21      END GENERATENUMBERS; --Atspausdinu skaičius, kurie sudėti array
+  22      PROCEDURE PRINTNUMBERS(
+  23          ARR IN NUMBERTABLE
+  24      ) IS
+  25   --Dedam į stringą mūsų norimus atspausdinti skaičius
+  26          OUTPUT_LINE VARCHAR2(4000) := ''; --čia gal ir mažesnį galima būtų imti
+  27      BEGIN
+  28          FOR I IN ARR.FIRST..ARR.LAST LOOP --Bandome paimti i'tajį elementą iš sąrašo nuo pirmo iki paskutinio
+  29              OUTPUT_LINE := OUTPUT_LINE
+  30                  || ARR(I)
+  31                  || ' | ';
+  32          END LOOP;
+  33          DBMS_OUTPUT.PUT_LINE('| '
+  34              || OUTPUT_LINE);
+  35      END PRINTNUMBERS; --Mano Double Selection Sort - arba smagiau Cocktail Sort :))-------------------------------
+  36      PROCEDURE DOUBLESELECTIONSORT(
+  37          ARR IN OUT NUMBERTABLE
+  38      ) IS
+  39          TMP       NUMBER;
+  40   --kur eis maži ir dideli skaičiai (kairė/dešinė)
+  41          MIN_INDEX PLS_INTEGER;
+  42          MAX_INDEX PLS_INTEGER;
+  43      BEGIN
+  44          FOR I IN 1..ARR.COUNT/2 LOOP --skaičiuojame iki vidurio
+  45              MIN_INDEX := I;
+  46              MAX_INDEX := I;
+  47              FOR J IN I..ARR.COUNT-I+1 LOOP --pajudinam paiešką į kitą poz (ne ten kur maži ar dideli sk)
+  48                  IF ARR(J) < ARR(MIN_INDEX) THEN --dedam į kairį šoną prie mažų
+  49                      MIN_INDEX := J;
+  50                  END IF;
+  51                  IF ARR(J) > ARR(MAX_INDEX) THEN --dedam į dešinį šoną prie didelių
+  52                      MAX_INDEX := J;
+  53                  END IF;
+  54              END LOOP;
+  55   --Čia metam į priekį mažiausią
+  56              TMP := ARR(MIN_INDEX); --Temp value (laikyti prieš nusprendžiant kur dėti)
+  57              ARR(MIN_INDEX) := ARR(I);
+  58              ARR(I) := TMP;
+  59   --Tikrinam ar ne blogai numetėm auksčiausią skaičių pabaigoje, kai mažiausias jau kairėje
+  60              IF MAX_INDEX = ARR.COUNT-I+1 THEN
+  61                  MAX_INDEX := MIN_INDEX;
+  62              END IF;
+  63   --Čia į galą numetam didžiausią
+  64              TMP := ARR(MAX_INDEX);
+  65              ARR(MAX_INDEX) := ARR(ARR.COUNT-I+1);
+  66              ARR(ARR.COUNT-I+1) := TMP;
+  67          END LOOP;
+  68      END DOUBLESELECTIONSORT; --Linear search --------------------------------------------------------------------
+  69   --Target yra mano ieškomas skaičius
+  70      FUNCTION LINEARSEARCH(
+  71          ARR IN NUMBERTABLE,
+  72          TARGET IN NUMBER
+  73      ) RETURN PLS_INTEGER IS
+  74          ITERATIONS PLS_INTEGER := 0; --Sakėt berods, kad greitesnis ir mažiau vietos užima, tai panaudojau
+  75      BEGIN
+  76          FOR I IN ARR.FIRST..ARR.LAST LOOP --Paprastas cikliukas - einam pro kiekvieną skaičių
+  77              ITERATIONS := ITERATIONS + 1;
+  78              IF ARR(I) = TARGET THEN
+  79                  RETURN ITERATIONS;
+  80              END IF;
+  81          END LOOP;
+  82          RETURN ITERATIONS;
+  83      END LINEARSEARCH; --Binary search ---------------------------------------------------------------------
+  84      FUNCTION BINARYSEARCH(
+  85          ARR IN NUMBERTABLE,
+  86          TARGET IN NUMBER
+  87      ) RETURN PLS_INTEGER IS
+  88          LOW        PLS_INTEGER := ARR.FIRST;
+  89          HIGH       PLS_INTEGER := ARR.LAST;
+  90          MID        PLS_INTEGER;
+  91          ITERATIONS PLS_INTEGER := 0;
+  92      BEGIN
+  93          WHILE LOW <= HIGH LOOP --Kad neliktų 1 sk, nes jei tik vienas,tai turėtų palikti 1 iteraciją, vadinasi radom savo sk
+  94              ITERATIONS := ITERATIONS + 1;
+  95              MID := (LOW + HIGH) / 2; --Formulė kaip eiti toliau, kai
+  96              IF ARR(MID) < TARGET THEN
+  97                  LOW := MID + 1;
+  98              ELSIF ARR(MID) > TARGET THEN
+  99                  HIGH := MID - 1;
+  100              ELSE
+  101                  RETURN ITERATIONS;
+  102              END IF;
+  103          END LOOP;
+  104          RETURN ITERATIONS;
+  105      END BINARYSEARCH; -- Atprintina mano visas norimas reikšmes po skaičiavimų, palygina kuris it sk didesnis --------
+  106      PROCEDURE SEARCHANDPRINTITERATIONS IS
+  107          TOTALITERATIONSLINEAR    PLS_INTEGER := 0;
+  108          TOTALITERATIONSBINARY    PLS_INTEGER := 0;
+  109          AVGITERATIONSLINEAR      NUMBER; --Naudoju NUMBER, nes reikia tiksliau paskaičiuoti (bent manau taip statistiškai tiksliau)
+  110          AVGITERATIONSBINARY      NUMBER;
+  111          LINEAR_SEARCH_ITERATIONS PLS_INTEGER;
+  112          BINARY_SEARCH_ITERATIONS PLS_INTEGER;
+  113      BEGIN
+  114          FOR I IN NUMBERS.FIRST..NUMBERS.LAST LOOP
+  115   --
+  116   -- Guaname linear search iteraciju kiek
+  117              LINEAR_SEARCH_ITERATIONS := LINEARSEARCH(SORTEDNUMBERS, NUMBERS(I));
+  118              TOTALITERATIONSLINEAR := TOTALITERATIONSLINEAR + LINEAR_SEARCH_ITERATIONS;
+  119              DBMS_OUTPUT.PUT_LINE('Number: '
+  120                  || TO_CHAR(NUMBERS(I))
+  121                  || ' found in: '
+  122                  || TO_CHAR(LINEAR_SEARCH_ITERATIONS)
+  123                  || ' iterations with linear search.' );
+  124   --
+  125   -- Guaname binary search iteraciju kieki
+  126              BINARY_SEARCH_ITERATIONS := BINARYSEARCH(SORTEDNUMBERS, NUMBERS(I));
+  127              TOTALITERATIONSBINARY := TOTALITERATIONSBINARY + BINARY_SEARCH_ITERATIONS;
+  128              DBMS_OUTPUT.PUT_LINE('Number: '
+  129                  || TO_CHAR(NUMBERS(I))
+  130                  || ' found in: '
+  131                  || TO_CHAR(BINARY_SEARCH_ITERATIONS)
+  132                  || ' iterations with binary search.' );
+  133          END LOOP;
+  134          AVGITERATIONSLINEAR := TOTALITERATIONSLINEAR / NUMBERS.COUNT;
+  135          AVGITERATIONSBINARY := TOTALITERATIONSBINARY / NUMBERS.COUNT;
+  136          DBMS_OUTPUT.PUT_LINE('Avg - Linear Search: '
+  137              || TO_CHAR(AVGITERATIONSLINEAR));
+  138          DBMS_OUTPUT.PUT_LINE('Avg - Binary Search: '
+  139              || TO_CHAR(AVGITERATIONSBINARY));
+  140          DBMS_OUTPUT.PUT_LINE('Palyginimas: Linear Search reikia '
+  141              || TO_CHAR(AVGITERATIONSLINEAR - AVGITERATIONSBINARY)
+  142              || ' daugiau iteracijų (by average) nei Binry Search.');
+  143      END SEARCHANDPRINTITERATIONS; -- Procedura kuri atspausdina iteracijas
+  144      PROCEDURE PRINT_ITERATIONS(
+  145      ) IS
+  146      BEGIN
+  147      END PRINT_ITERATIONS BEGIN
+  148   --Pasirinkau 20 skaičių (manau ir 10 u=tenka, tiesiog manau aiškiau matosi su didesniu arr)
+  149      GENERATENUMBERS(20);
+  150      DBMS_OUTPUT              .PUT_LINE('Nesurūšiuotas sąrašas:');
+  151      PRINTNUMBERS             (NUMBERS);
+  152      DOUBLESELECTIONSORT      (SORTEDNUMBERS);
+  153      DBMS_OUTPUT              .PUT_LINE('Surūšiuotas sąrašas:');
+  154      PRINTNUMBERS             (SORTEDNUMBERS);
+  155   --Atspausdinu likusius rezultatus
+  156   -- SAVELINEARSEARCHRESULTS  (I_SORTEDNUMBERS IN 'tipas', I_NUMBERS IN 'tipas', O_RESULTS1 OUT ARR1); --arr1 turės elementą iteracijų
+  157   -- SAVELINEARSEARCHRESULTS  (I_SORTEDNUMBERS IN 'tipas', I_NUMBERS IN 'tipas', O_RESULTS2 OUT ARR1);
+  158   -- L_LINEAR_AVG             := CALCULATEAVG(O_RESULTS1 IN ARR1);
+  159   -- L_BINARY_AVG             := CALCULATEAVG(O_RESULTS2 IN ARR1);
+  160   -- DBMS_OUTPUT              .PUT_LINE(L_LINEAR_AVG
+  161   --     || 'kitas'
+  162   --     || L_BINARY_AVG);
+  163   --Per antrą patikrins parametrus (pakeitimus).
+  164      SEARCHANDPRINTITERATIONS;
+  165  END;
+  166  /
+
+--Pasirinkau 20 skaičių (manau ir 10 u=tenka, tiesiog manau aiškiau matosi su
+didesniu arr)
+*
+
+ERROR at line 152:
+ORA-06550: line 145, column 5:
+PLS-00103: Encountered the symbol ")" when expecting one of the following:
+
+   <an identifier> <a double-quoted delimited-identifier>
+   current delete exists prior
+SQL> DECLARE
+  2   --Padarau naują tipą (composite data type). Čia mano array realiai, kur dėsiu skaičius, tai tipas skaitinis
+  3      TYPE NUMBERTABLE IS
+  4          TABLE OF NUMBER(3) INDEX BY PLS_INTEGER; --Taip ir galima pažymėti dydį
+  5      NUMBERS                  NUMBERTABLE; --Čia eis mano paprasti skaičiai
+  6      SORTEDNUMBERS            NUMBERTABLE; --Čia eis mano surūšiuoti skaičiai
+  7   -- Funkcija skaičių generavimui ------------------------------------------------------
+  8      FUNCTION GENERATERANDOMNUMBER RETURN NUMBER IS
+  9      BEGIN
+  10          RETURN DBMS_RANDOM.VALUE(1, 100); --Su TRUNC, nes DBMS_RANDOM.VALUE generuoja su kableliu skaičius (nereikia)
+  11      END GENERATERANDOMNUMBER; --Sudedam į array
+  12      PROCEDURE GENERATENUMBERS(
+  13          N IN NUMBER
+  14      ) IS
+  15      BEGIN
+  16          FOR I IN 1..N LOOP
+  17              NUMBERS(I) := GENERATERANDOMNUMBER; --Sudedam į arrays suindeksuotus skaičius
+  18   -- sortedNumbers(i) := numbers(i); --Dėsim vėliau surūšiuotus
+  19          END LOOP;
+  20          SORTEDNUMBERS := NUMBERS; --vietoj 22
+  21      END GENERATENUMBERS; --Atspausdinu skaičius, kurie sudėti array
+  22      PROCEDURE PRINTNUMBERS(
+  23          ARR IN NUMBERTABLE
+  24      ) IS
+  25   --Dedam į stringą mūsų norimus atspausdinti skaičius
+  26          OUTPUT_LINE VARCHAR2(4000) := ''; --čia gal ir mažesnį galima būtų imti
+  27      BEGIN
+  28          FOR I IN ARR.FIRST..ARR.LAST LOOP --Bandome paimti i'tajį elementą iš sąrašo nuo pirmo iki paskutinio
+  29              OUTPUT_LINE := OUTPUT_LINE
+  30                  || ARR(I)
+  31                  || ' | ';
+  32          END LOOP;
+  33          DBMS_OUTPUT.PUT_LINE('| '
+  34              || OUTPUT_LINE);
+  35      END PRINTNUMBERS; --Mano Double Selection Sort - arba smagiau Cocktail Sort :))-------------------------------
+  36      PROCEDURE DOUBLESELECTIONSORT(
+  37          ARR IN OUT NUMBERTABLE
+  38      ) IS
+  39          TMP       NUMBER;
+  40   --kur eis maži ir dideli skaičiai (kairė/dešinė)
+  41          MIN_INDEX PLS_INTEGER;
+  42          MAX_INDEX PLS_INTEGER;
+  43      BEGIN
+  44          FOR I IN 1..ARR.COUNT/2 LOOP --skaičiuojame iki vidurio
+  45              MIN_INDEX := I;
+  46              MAX_INDEX := I;
+  47              FOR J IN I..ARR.COUNT-I+1 LOOP --pajudinam paiešką į kitą poz (ne ten kur maži ar dideli sk)
+  48                  IF ARR(J) < ARR(MIN_INDEX) THEN --dedam į kairį šoną prie mažų
+  49                      MIN_INDEX := J;
+  50                  END IF;
+  51                  IF ARR(J) > ARR(MAX_INDEX) THEN --dedam į dešinį šoną prie didelių
+  52                      MAX_INDEX := J;
+  53                  END IF;
+  54              END LOOP;
+  55   --Čia metam į priekį mažiausią
+  56              TMP := ARR(MIN_INDEX); --Temp value (laikyti prieš nusprendžiant kur dėti)
+  57              ARR(MIN_INDEX) := ARR(I);
+  58              ARR(I) := TMP;
+  59   --Tikrinam ar ne blogai numetėm auksčiausią skaičių pabaigoje, kai mažiausias jau kairėje
+  60              IF MAX_INDEX = ARR.COUNT-I+1 THEN
+  61                  MAX_INDEX := MIN_INDEX;
+  62              END IF;
+  63   --Čia į galą numetam didžiausią
+  64              TMP := ARR(MAX_INDEX);
+  65              ARR(MAX_INDEX) := ARR(ARR.COUNT-I+1);
+  66              ARR(ARR.COUNT-I+1) := TMP;
+  67          END LOOP;
+  68      END DOUBLESELECTIONSORT; --Linear search --------------------------------------------------------------------
+  69   --Target yra mano ieškomas skaičius
+  70      FUNCTION LINEARSEARCH(
+  71          ARR IN NUMBERTABLE,
+  72          TARGET IN NUMBER
+  73      ) RETURN PLS_INTEGER IS
+  74          ITERATIONS PLS_INTEGER := 0; --Sakėt berods, kad greitesnis ir mažiau vietos užima, tai panaudojau
+  75      BEGIN
+  76          FOR I IN ARR.FIRST..ARR.LAST LOOP --Paprastas cikliukas - einam pro kiekvieną skaičių
+  77              ITERATIONS := ITERATIONS + 1;
+  78              IF ARR(I) = TARGET THEN
+  79                  RETURN ITERATIONS;
+  80              END IF;
+  81          END LOOP;
+  82          RETURN ITERATIONS;
+  83      END LINEARSEARCH; --Binary search ---------------------------------------------------------------------
+  84      FUNCTION BINARYSEARCH(
+  85          ARR IN NUMBERTABLE,
+  86          TARGET IN NUMBER
+  87      ) RETURN PLS_INTEGER IS
+  88          LOW        PLS_INTEGER := ARR.FIRST;
+  89          HIGH       PLS_INTEGER := ARR.LAST;
+  90          MID        PLS_INTEGER;
+  91          ITERATIONS PLS_INTEGER := 0;
+  92      BEGIN
+  93          WHILE LOW <= HIGH LOOP --Kad neliktų 1 sk, nes jei tik vienas,tai turėtų palikti 1 iteraciją, vadinasi radom savo sk
+  94              ITERATIONS := ITERATIONS + 1;
+  95              MID := (LOW + HIGH) / 2; --Formulė kaip eiti toliau, kai
+  96              IF ARR(MID) < TARGET THEN
+  97                  LOW := MID + 1;
+  98              ELSIF ARR(MID) > TARGET THEN
+  99                  HIGH := MID - 1;
+  100              ELSE
+  101                  RETURN ITERATIONS;
+  102              END IF;
+  103          END LOOP;
+  104          RETURN ITERATIONS;
+  105      END BINARYSEARCH; -- Atprintina mano visas norimas reikšmes po skaičiavimų, palygina kuris it sk didesnis --------
+  106      PROCEDURE SEARCHANDPRINTITERATIONS IS
+  107          TOTALITERATIONSLINEAR    PLS_INTEGER := 0;
+  108          TOTALITERATIONSBINARY    PLS_INTEGER := 0;
+  109          AVGITERATIONSLINEAR      NUMBER; --Naudoju NUMBER, nes reikia tiksliau paskaičiuoti (bent manau taip statistiškai tiksliau)
+  110          AVGITERATIONSBINARY      NUMBER;
+  111          LINEAR_SEARCH_ITERATIONS PLS_INTEGER;
+  112          BINARY_SEARCH_ITERATIONS PLS_INTEGER;
+  113      BEGIN
+  114          FOR I IN NUMBERS.FIRST..NUMBERS.LAST LOOP
+  115   --
+  116   -- Guaname linear search iteraciju kiek
+  117              LINEAR_SEARCH_ITERATIONS := LINEARSEARCH(SORTEDNUMBERS, NUMBERS(I));
+  118              TOTALITERATIONSLINEAR := TOTALITERATIONSLINEAR + LINEAR_SEARCH_ITERATIONS;
+  119              DBMS_OUTPUT.PUT_LINE('Number: '
+  120                  || TO_CHAR(NUMBERS(I))
+  121                  || ' found in: '
+  122                  || TO_CHAR(LINEAR_SEARCH_ITERATIONS)
+  123                  || ' iterations with linear search.' );
+  124   --
+  125   -- Guaname binary search iteraciju kieki
+  126              BINARY_SEARCH_ITERATIONS := BINARYSEARCH(SORTEDNUMBERS, NUMBERS(I));
+  127              TOTALITERATIONSBINARY := TOTALITERATIONSBINARY + BINARY_SEARCH_ITERATIONS;
+  128              DBMS_OUTPUT.PUT_LINE('Number: '
+  129                  || TO_CHAR(NUMBERS(I))
+  130                  || ' found in: '
+  131                  || TO_CHAR(BINARY_SEARCH_ITERATIONS)
+  132                  || ' iterations with binary search.' );
+  133          END LOOP;
+  134          AVGITERATIONSLINEAR := TOTALITERATIONSLINEAR / NUMBERS.COUNT;
+  135          AVGITERATIONSBINARY := TOTALITERATIONSBINARY / NUMBERS.COUNT;
+  136          DBMS_OUTPUT.PUT_LINE('Avg - Linear Search: '
+  137              || TO_CHAR(AVGITERATIONSLINEAR));
+  138          DBMS_OUTPUT.PUT_LINE('Avg - Binary Search: '
+  139              || TO_CHAR(AVGITERATIONSBINARY));
+  140          DBMS_OUTPUT.PUT_LINE('Palyginimas: Linear Search reikia '
+  141              || TO_CHAR(AVGITERATIONSLINEAR - AVGITERATIONSBINARY)
+  142              || ' daugiau iteracijų (by average) nei Binry Search.');
+  143      END SEARCHANDPRINTITERATIONS; -- Procedura kuri atspausdina iteracijas
+  144   --Pasirinkau 20 skaičių (manau ir 10 u=tenka, tiesiog manau aiškiau matosi su didesniu arr)
+  145      GENERATENUMBERS          (20);
+  146      DBMS_OUTPUT              .PUT_LINE('Nesurūšiuotas sąrašas:');
+  147      PRINTNUMBERS             (NUMBERS);
+  148      DOUBLESELECTIONSORT      (SORTEDNUMBERS);
+  149      DBMS_OUTPUT              .PUT_LINE('Surūšiuotas sąrašas:');
+  150      PRINTNUMBERS             (SORTEDNUMBERS);
+  151   --Atspausdinu likusius rezultatus
+  152   -- SAVELINEARSEARCHRESULTS  (I_SORTEDNUMBERS IN 'tipas', I_NUMBERS IN 'tipas', O_RESULTS1 OUT ARR1); --arr1 turės elementą iteracijų
+  153   -- SAVELINEARSEARCHRESULTS  (I_SORTEDNUMBERS IN 'tipas', I_NUMBERS IN 'tipas', O_RESULTS2 OUT ARR1);
+  154   -- L_LINEAR_AVG             := CALCULATEAVG(O_RESULTS1 IN ARR1);
+  155   -- L_BINARY_AVG             := CALCULATEAVG(O_RESULTS2 IN ARR1);
+  156   -- DBMS_OUTPUT              .PUT_LINE(L_LINEAR_AVG
+  157   --     || 'kitas'
+  158   --     || L_BINARY_AVG);
+  159   --Per antrą patikrins parametrus (pakeitimus).
+  160      SEARCHANDPRINTITERATIONS;
+  161  END;
+  162  /
+
+    PRINTNUMBERS             (NUMBERS);
+     *
+ERROR at line 151:
+ORA-06550: line 145, column 5:
+PLS-00103: Encountered the symbol "GENERATENUMBERS" when expecting one of the
+following:
+
+   begin function pragma procedure
+The symbol "begin" was substituted for "GENERATENUMBERS" to continue.
+SQL> DECLARE
+  2   --Padarau naują tipą (composite data type). Čia mano array realiai, kur dėsiu skaičius, tai tipas skaitinis
+  3      TYPE NUMBERTABLE IS
+  4          TABLE OF NUMBER(3) INDEX BY PLS_INTEGER; --Taip ir galima pažymėti dydį
+  5      NUMBERS       NUMBERTABLE; --Čia eis mano paprasti skaičiai
+  6      SORTEDNUMBERS NUMBERTABLE; --Čia eis mano surūšiuoti skaičiai
+  7   -- Funkcija skaičių generavimui ------------------------------------------------------
+  8      FUNCTION GENERATERANDOMNUMBER RETURN NUMBER IS
+  9      BEGIN
+  10          RETURN DBMS_RANDOM.VALUE(1, 100); --Su TRUNC, nes DBMS_RANDOM.VALUE generuoja su kableliu skaičius (nereikia)
+  11      END GENERATERANDOMNUMBER; --Sudedam į array
+  12      PROCEDURE GENERATENUMBERS(
+  13          N IN NUMBER
+  14      ) IS
+  15      BEGIN
+  16          FOR I IN 1..N LOOP
+  17              NUMBERS(I) := GENERATERANDOMNUMBER; --Sudedam į arrays suindeksuotus skaičius
+  18   -- sortedNumbers(i) := numbers(i); --Dėsim vėliau surūšiuotus
+  19          END LOOP;
+  20          SORTEDNUMBERS := NUMBERS; --vietoj 22
+  21      END GENERATENUMBERS; --Atspausdinu skaičius, kurie sudėti array
+  22      PROCEDURE PRINTNUMBERS(
+  23          ARR IN NUMBERTABLE
+  24      ) IS
+  25   --Dedam į stringą mūsų norimus atspausdinti skaičius
+  26          OUTPUT_LINE VARCHAR2(4000) := ''; --čia gal ir mažesnį galima būtų imti
+  27      BEGIN
+  28          FOR I IN ARR.FIRST..ARR.LAST LOOP --Bandome paimti i'tajį elementą iš sąrašo nuo pirmo iki paskutinio
+  29              OUTPUT_LINE := OUTPUT_LINE
+  30                  || ARR(I)
+  31                  || ' | ';
+  32          END LOOP;
+  33          DBMS_OUTPUT.PUT_LINE('| '
+  34              || OUTPUT_LINE);
+  35      END PRINTNUMBERS; --Mano Double Selection Sort - arba smagiau Cocktail Sort :))-------------------------------
+  36      PROCEDURE DOUBLESELECTIONSORT(
+  37          ARR IN OUT NUMBERTABLE
+  38      ) IS
+  39          TMP       NUMBER;
+  40   --kur eis maži ir dideli skaičiai (kairė/dešinė)
+  41          MIN_INDEX PLS_INTEGER;
+  42          MAX_INDEX PLS_INTEGER;
+  43      BEGIN
+  44          FOR I IN 1..ARR.COUNT/2 LOOP --skaičiuojame iki vidurio
+  45              MIN_INDEX := I;
+  46              MAX_INDEX := I;
+  47              FOR J IN I..ARR.COUNT-I+1 LOOP --pajudinam paiešką į kitą poz (ne ten kur maži ar dideli sk)
+  48                  IF ARR(J) < ARR(MIN_INDEX) THEN --dedam į kairį šoną prie mažų
+  49                      MIN_INDEX := J;
+  50                  END IF;
+  51                  IF ARR(J) > ARR(MAX_INDEX) THEN --dedam į dešinį šoną prie didelių
+  52                      MAX_INDEX := J;
+  53                  END IF;
+  54              END LOOP;
+  55   --Čia metam į priekį mažiausią
+  56              TMP := ARR(MIN_INDEX); --Temp value (laikyti prieš nusprendžiant kur dėti)
+  57              ARR(MIN_INDEX) := ARR(I);
+  58              ARR(I) := TMP;
+  59   --Tikrinam ar ne blogai numetėm auksčiausią skaičių pabaigoje, kai mažiausias jau kairėje
+  60              IF MAX_INDEX = ARR.COUNT-I+1 THEN
+  61                  MAX_INDEX := MIN_INDEX;
+  62              END IF;
+  63   --Čia į galą numetam didžiausią
+  64              TMP := ARR(MAX_INDEX);
+  65              ARR(MAX_INDEX) := ARR(ARR.COUNT-I+1);
+  66              ARR(ARR.COUNT-I+1) := TMP;
+  67          END LOOP;
+  68      END DOUBLESELECTIONSORT; --Linear search --------------------------------------------------------------------
+  69   --Target yra mano ieškomas skaičius
+  70      FUNCTION LINEARSEARCH(
+  71          ARR IN NUMBERTABLE,
+  72          TARGET IN NUMBER
+  73      ) RETURN PLS_INTEGER IS
+  74          ITERATIONS PLS_INTEGER := 0; --Sakėt berods, kad greitesnis ir mažiau vietos užima, tai panaudojau
+  75      BEGIN
+  76          FOR I IN ARR.FIRST..ARR.LAST LOOP --Paprastas cikliukas - einam pro kiekvieną skaičių
+  77              ITERATIONS := ITERATIONS + 1;
+  78              IF ARR(I) = TARGET THEN
+  79                  RETURN ITERATIONS;
+  80              END IF;
+  81          END LOOP;
+  82          RETURN ITERATIONS;
+  83      END LINEARSEARCH; --Binary search ---------------------------------------------------------------------
+  84      FUNCTION BINARYSEARCH(
+  85          ARR IN NUMBERTABLE,
+  86          TARGET IN NUMBER
+  87      ) RETURN PLS_INTEGER IS
+  88          LOW        PLS_INTEGER := ARR.FIRST;
+  89          HIGH       PLS_INTEGER := ARR.LAST;
+  90          MID        PLS_INTEGER;
+  91          ITERATIONS PLS_INTEGER := 0;
+  92      BEGIN
+  93          WHILE LOW <= HIGH LOOP --Kad neliktų 1 sk, nes jei tik vienas,tai turėtų palikti 1 iteraciją, vadinasi radom savo sk
+  94              ITERATIONS := ITERATIONS + 1;
+  95              MID := (LOW + HIGH) / 2; --Formulė kaip eiti toliau, kai
+  96              IF ARR(MID) < TARGET THEN
+  97                  LOW := MID + 1;
+  98              ELSIF ARR(MID) > TARGET THEN
+  99                  HIGH := MID - 1;
+  100              ELSE
+  101                  RETURN ITERATIONS;
+  102              END IF;
+  103          END LOOP;
+  104          RETURN ITERATIONS;
+  105      END BINARYSEARCH; -- Atprintina mano visas norimas reikšmes po skaičiavimų, palygina kuris it sk didesnis --------
+  106      PROCEDURE SEARCHANDPRINTITERATIONS IS
+  107          TOTALITERATIONSLINEAR    PLS_INTEGER := 0;
+  108          TOTALITERATIONSBINARY    PLS_INTEGER := 0;
+  109          AVGITERATIONSLINEAR      NUMBER; --Naudoju NUMBER, nes reikia tiksliau paskaičiuoti (bent manau taip statistiškai tiksliau)
+  110          AVGITERATIONSBINARY      NUMBER;
+  111          LINEAR_SEARCH_ITERATIONS PLS_INTEGER;
+  112          BINARY_SEARCH_ITERATIONS PLS_INTEGER;
+  113      BEGIN
+  114          FOR I IN NUMBERS.FIRST..NUMBERS.LAST LOOP
+  115   --
+  116   -- Guaname linear search iteraciju kiek
+  117              LINEAR_SEARCH_ITERATIONS := LINEARSEARCH(SORTEDNUMBERS, NUMBERS(I));
+  118              TOTALITERATIONSLINEAR := TOTALITERATIONSLINEAR + LINEAR_SEARCH_ITERATIONS;
+  119              DBMS_OUTPUT.PUT_LINE('Number: '
+  120                  || TO_CHAR(NUMBERS(I))
+  121                  || ' found in: '
+  122                  || TO_CHAR(LINEAR_SEARCH_ITERATIONS)
+  123                  || ' iterations with linear search.' );
+  124   --
+  125   -- Guaname binary search iteraciju kieki
+  126              BINARY_SEARCH_ITERATIONS := BINARYSEARCH(SORTEDNUMBERS, NUMBERS(I));
+  127              TOTALITERATIONSBINARY := TOTALITERATIONSBINARY + BINARY_SEARCH_ITERATIONS;
+  128              DBMS_OUTPUT.PUT_LINE('Number: '
+  129                  || TO_CHAR(NUMBERS(I))
+  130                  || ' found in: '
+  131                  || TO_CHAR(BINARY_SEARCH_ITERATIONS)
+  132                  || ' iterations with binary search.' );
+  133          END LOOP;
+  134          AVGITERATIONSLINEAR := TOTALITERATIONSLINEAR / NUMBERS.COUNT;
+  135          AVGITERATIONSBINARY := TOTALITERATIONSBINARY / NUMBERS.COUNT;
+  136          DBMS_OUTPUT.PUT_LINE('Avg - Linear Search: '
+  137              || TO_CHAR(AVGITERATIONSLINEAR));
+  138          DBMS_OUTPUT.PUT_LINE('Avg - Binary Search: '
+  139              || TO_CHAR(AVGITERATIONSBINARY));
+  140          DBMS_OUTPUT.PUT_LINE('Palyginimas: Linear Search reikia '
+  141              || TO_CHAR(AVGITERATIONSLINEAR - AVGITERATIONSBINARY)
+  142              || ' daugiau iteracijų (by average) nei Binry Search.');
+  143      END SEARCHANDPRINTITERATIONS; -- Procedura kuri atspausdina iteracijas
+  144  BEGIN
+  145   --Pasirinkau 20 skaičių (manau ir 10 u=tenka, tiesiog manau aiškiau matosi su didesniu arr)
+  146      GENERATENUMBERS(20);
+  147      DBMS_OUTPUT .PUT_LINE('Nesurūšiuotas sąrašas:');
+  148      PRINTNUMBERS (NUMBERS);
+  149      DOUBLESELECTIONSORT (SORTEDNUMBERS);
+  150      DBMS_OUTPUT .PUT_LINE('Surūšiuotas sąrašas:');
+  151      PRINTNUMBERS (SORTEDNUMBERS);
+  152   --Atspausdinu likusius rezultatus
+  153   -- SAVELINEARSEARCHRESULTS  (I_SORTEDNUMBERS IN 'tipas', I_NUMBERS IN 'tipas', O_RESULTS1 OUT ARR1); --arr1 turės elementą iteracijų
+  154   -- SAVELINEARSEARCHRESULTS  (I_SORTEDNUMBERS IN 'tipas', I_NUMBERS IN 'tipas', O_RESULTS2 OUT ARR1);
+  155   -- L_LINEAR_AVG             := CALCULATEAVG(O_RESULTS1 IN ARR1);
+  156   -- L_BINARY_AVG             := CALCULATEAVG(O_RESULTS2 IN ARR1);
+  157   -- DBMS_OUTPUT              .PUT_LINE(L_LINEAR_AVG
+  158   --     || 'kitas'
+  159   --     || L_BINARY_AVG);
+  160   --Per antrą patikrins parametrus (pakeitimus).
+  161      SEARCHANDPRINTITERATIONS;
+  162  END;
+  163  /
+
+Nesurūšiuotas sąrašas:                                                          
+| 20 | 72 | 69 | 62 | 5 | 21 | 10 | 99 | 23 | 89 | 12 | 75 | 38 | 2 | 82 | 89 | 
+11 | 96 | 31 | 7 |                                                              
+Surūšiuotas sąrašas:                                                            
+| 2 | 5 | 7 | 10 | 11 | 12 | 20 | 38 | 23 | 62 | 31 | 69 | 21 | 72 | 75 | 82 |  
+89 | 89 | 96 | 99 |                                                             
+Number: 20 found in: 7 iterations with linear search.                           
+Number: 20 found in: 5 iterations with binary search.                           
+Number: 72 found in: 14 iterations with linear search.                          
+Number: 72 found in: 3 iterations with binary search.                           
+Number: 69 found in: 12 iterations with linear search.                          
+Number: 69 found in: 4 iterations with binary search.                           
+Number: 62 found in: 10 iterations with linear search.                          
+Number: 62 found in: 4 iterations with binary search.                           
+Number: 5 found in: 2 iterations with linear search.                            
+Number: 5 found in: 4 iterations with binary search.                            
+Number: 21 found in: 13 iterations with linear search.                          
+Number: 21 found in: 5 iterations with binary search.                           
+Number: 10 found in: 4 iterations with linear search.                           
+Number: 10 found in: 5 iterations with binary search.                           
+Number: 99 found in: 20 iterations with linear search.                          
+Number: 99 found in: 4 iterations with binary search.                           
+Number: 23 found in: 9 iterations with linear search.                           
+Number: 23 found in: 3 iterations with binary search.                           
+Number: 89 found in: 17 iterations with linear search.                          
+Number: 89 found in: 4 iterations with binary search.                           
+Number: 12 found in: 6 iterations with linear search.                           
+Number: 12 found in: 2 iterations with binary search.                           
+Number: 75 found in: 15 iterations with linear search.                          
+Number: 75 found in: 4 iterations with binary search.                           
+Number: 38 found in: 8 iterations with linear search.                           
+Number: 38 found in: 4 iterations with binary search.                           
+Number: 2 found in: 1 iterations with linear search.                            
+Number: 2 found in: 5 iterations with binary search.                            
+Number: 82 found in: 16 iterations with linear search.                          
+Number: 82 found in: 2 iterations with binary search.                           
+Number: 89 found in: 17 iterations with linear search.                          
+Number: 89 found in: 4 iterations with binary search.                           
+Number: 11 found in: 5 iterations with linear search.                           
+Number: 11 found in: 4 iterations with binary search.                           
+Number: 96 found in: 19 iterations with linear search.                          
+Number: 96 found in: 3 iterations with binary search.                           
+Number: 31 found in: 11 iterations with linear search.                          
+Number: 31 found in: 1 iterations with binary search.                           
+Number: 7 found in: 3 iterations with linear search.                            
+Number: 7 found in: 3 iterations with binary search.                            
+Avg - Linear Search: 10.45                                                      
+Avg - Binary Search: 3.65                                                       
+Palyginimas: Linear Search reikia 6.8 daugiau iteracijų (by average) nei Binry  
+Search.                                                                         
+
+PL/SQL procedure successfully completed.
+
+Commit complete.
+

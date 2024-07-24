@@ -1,0 +1,20 @@
+SQL> DECLARE
+  2      NUM    NUMBER := 4; -- Example number
+  3      SQUARE NUMBER; -- Variable to store the square of the number
+  4  BEGIN
+  5      SQUARE := NUM * NUM; -- Calculate square
+  6      DBMS_OUTPUT.PUT_LINE('The square of '
+  7          || NUM
+  8          || ' is: '
+  9          || SQUARE); -- Output the result
+  10  END;
+  11  /
+
+The square of 4 is: 16                                                          
+
+PL/SQL procedure successfully completed.
+
+Commit complete.
+
+SQL> SPOOL OFF;
+

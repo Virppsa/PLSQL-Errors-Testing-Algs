@@ -1,0 +1,342 @@
+SQL> SET SERVEROUTPUT ON 
+SQL> /*
+  2  DROP TABLE error_logs;
+  3  /
+  4  CREATE TABLE error_logs (
+  5      log_id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  6      error_code VARCHAR2(20),
+  7      error_message VARCHAR2(250),
+  8      backtrace CLOB,
+  9      owner VARCHAR2(100),
+  10      timestamp DATE
+  11  );
+  12  /
+  13  */
+SQL> /* ERROR HANDLING PACKAGE */
+SQL> CREATE OR REPLACE PACKAGE P_ERROR_HANDLING AS
+  2      INVALID_ARRAY_SIZE EXCEPTION;
+  3      UNSORTED_ARRAY EXCEPTION;
+  4      MAX_VALUE_OVER_LIMIT EXCEPTION;
+  5
+  6      PRAGMA EXCEPTION_INIT(INVALID_ARRAY_SIZE, -20001);
+  7      PRAGMA EXCEPTION_INIT(UNSORTED_ARRAY, -20002);
+  8      PRAGMA EXCEPTION_INIT(MAX_VALUE_OVER_LIMIT, -20003);
+  9
+  10      PROCEDURE log_error_proc;
+  11  END P_ERROR_HANDLING;
+  12  /
+
+PACKAGE created.
+
+Commit complete.
+
+SQL> CREATE OR REPLACE PACKAGE BODY P_ERROR_HANDLING AS
+  2      FUNCTION get_error_message
+  3      RETURN VARCHAR2
+  4      IS
+  5      error_id number := SQLCODE;
+  6      err_message VARCHAR2(250);
+  7      BEGIN
+  8        IF error_id < -21000 OR error_id > -20000 THEN
+  9          RETURN SQLERRM;
+  10        END IF;
+  11
+  12        CASE error_id
+  13        WHEN -20001 THEN
+  14          err_message := 'Invalid array size';
+  15        WHEN -20002 THEN
+  16           err_message := 'Array unsorted';
+  17        WHEN -20003 THEN
+  18           err_message := 'Value over limit';
+  19        ELSE err_message := 'unknown';
+  20        END CASE;
+  21
+  22        RETURN err_message;
+  23      END;
+  24
+  25      PROCEDURE log_error_proc
+  26      IS
+  27      err_code VARCHAR2(20) := TO_CHAR(SQLCODE);
+  28      err_message VARCHAR2(250) := get_error_message();
+  29      created_id number;
+  30      PRAGMA AUTONOMOUS_TRANSACTION;
+  31      BEGIN
+  32        INSERT INTO error_logs (
+  33              error_code, error_message, backtrace, owner, timestamp
+  34          ) VALUES (
+  35              err_code, err_message, DBMS_UTILITY.format_error_backtrace, USER, SYSDATE
+  36          ) RETURNING log_id INTO created_id;
+  37          COMMIT;
+  38          DBMS_OUTPUT.PUT_LINE('Created error log with id: '|| created_id || ' (err: ' || err_message || ')');
+  39      EXCEPTION
+  40        WHEN OTHERS THEN
+  41          DBMS_OUTPUT.PUT_LINE('Could not log error: ' || SQLERRM);
+  42          RAISE;
+  43      END log_error_proc;
+  44  END P_ERROR_HANDLING;
+  45  /
+
+ORA-24344: success with compilation error
+PACKAGE BODY created.
+
+Commit complete.
+
+SQL> /* TYPES PACKAGE */
+SQL> CREATE OR REPLACE PACKAGE P_TYPES as
+  2    SUBTYPE num_type IS number(4);
+  3    TYPE num_array IS table of num_type;
+  4    TYPE search_result IS RECORD(idx pls_integer, iterations num_type);
+  5  END P_TYPES;
+  6  /
+
+PACKAGE created.
+
+Commit complete.
+
+SQL> /* SEARCH FUNCTIONS PACKAGE */
+SQL> CREATE OR REPLACE PACKAGE P_SEARCH_FUNCTIONS AS
+  2      FUNCTION linear_search_func(query_value P_TYPES.num_type, arr P_TYPES.num_array) RETURN P_TYPES.search_result;
+  3      FUNCTION binary_search_func(query_value P_TYPES.num_type, arr P_TYPES.num_array) RETURN P_TYPES.search_result;
+  4  END P_SEARCH_FUNCTIONS;
+  5  /
+
+PACKAGE created.
+
+Commit complete.
+
+SQL> CREATE OR REPLACE PACKAGE BODY P_SEARCH_FUNCTIONS AS
+  2  /* LINEAR SEARCH */
+  3    FUNCTION linear_search_func(query_value P_TYPES.num_type, arr P_TYPES.num_array)
+  4    RETURN P_TYPES.search_result
+  5    IS
+  6    sr P_TYPES.search_result;
+  7    BEGIN
+  8      sr.idx := -1;
+  9      sr.iterations := -1;
+  10
+  11      FOR i in 1 .. arr.count LOOP
+  12        IF arr(i) = query_value THEN
+  13          sr.idx := i;
+  14          sr.iterations := i;
+  15          EXIT;
+  16        END IF;
+  17      END LOOP;
+  18
+  19      IF SR.idx = -1 THEN
+  20        RAISE NO_DATA_FOUND;
+  21      END IF;
+  22
+  23      RETURN sr;
+  24      EXCEPTION
+  25        WHEN ACCESS_INTO_NULL OR COLLECTION_IS_NULL OR NO_DATA_FOUND THEN
+  26          P_ERROR_HANDLING.log_error_proc();
+  27          RAISE;
+  28    END linear_search_func;
+  29
+  30    /* BINARY SEARCH */
+  31    FUNCTION binary_search_func(query_value P_TYPES.num_type, arr P_TYPES.num_array)
+  32    RETURN P_TYPES.search_result
+  33    IS
+  34    l pls_integer;
+  35    m pls_integer;
+  36    r pls_integer;
+  37    sr P_TYPES.search_result;
+  38    BEGIN
+  39      FOR i IN 2 .. arr.count LOOP
+  40        IF arr(i) < arr(i - 1) THEN
+  41          RAISE P_ERROR_HANDLING.UNSORTED_ARRAY;
+  42        END IF;
+  43      END LOOP;
+  44
+  45      sr.idx := -1;
+  46      sr.iterations := 1;
+  47
+  48      l := 1;
+  49      r := arr.count;
+  50
+  51      WHILE l <= r
+  52      LOOP
+  53
+  54        m := (l + r) / 2;
+  55
+  56        IF arr(m) = query_value THEN
+  57          sr.idx := m;
+  58          EXIT;
+  59        ELSIF arr(m) < query_value THEN
+  60          sr.iterations := sr.iterations + 1;
+  61          l := m + 1;
+  62        ELSE
+  63          sr.iterations := sr.iterations + 1;
+  64          r := m - 1;
+  65        END IF;
+  66
+  67      END LOOP;
+  68
+  69      IF SR.idx = -1 THEN
+  70        RAISE NO_DATA_FOUND;
+  71      END IF;
+  72
+  73      RETURN sr;
+  74      EXCEPTION
+  75        WHEN ACCESS_INTO_NULL OR COLLECTION_IS_NULL OR P_ERROR_HANDLING.UNSORTED_ARRAY OR NO_DATA_FOUND THEN
+  76          P_ERROR_HANDLING.log_error_proc();
+  77          RAISE;
+  78    END binary_search_func;
+  79  END P_SEARCH_FUNCTIONS;
+  80  /
+
+PACKAGE BODY created.
+
+Commit complete.
+
+SQL> /* RADIX SORT PACKAGE */
+SQL> CREATE OR REPLACE PACKAGE P_RADIX_SORT AS
+  2    FUNCTION radix_sort_func(arr P_TYPES.num_array) RETURN P_TYPES.num_array;
+  3  END P_RADIX_SORT;
+  4  /
+
+PACKAGE created.
+
+Commit complete.
+
+SQL> CREATE OR REPLACE PACKAGE BODY P_RADIX_SORT AS
+  2    /* COUNT SORT */
+  3    FUNCTION count_sort_func(arr P_TYPES.num_array, exp P_TYPES.num_type)
+  4    RETURN P_TYPES.num_array
+  5    IS
+  6    n pls_integer;
+  7    tmp_idx pls_integer;
+  8    count_arr P_TYPES.num_array;
+  9    sorted_arr P_TYPES.num_array;
+  10    BEGIN
+  11      sorted_arr := P_TYPES.num_array();
+  12      sorted_arr.extend(arr.count);
+  13
+  14      count_arr := P_TYPES.num_array();
+  15      count_arr.extend(10);
+  16
+  17      FOR i in 1 .. 10 LOOP
+  18        count_arr(i) := 0;
+  19      END LOOP;
+  20
+  21      FOR i in 1 .. arr.count LOOP
+  22        tmp_idx := FLOOR((arr(i) / exp) mod 10) + 1;
+  23        count_arr(tmp_idx) := count_arr(tmp_idx) + 1;
+  24      END LOOP;
+  25
+  26      FOR i in 2 .. 10 LOOP
+  27        count_arr(i) := count_arr(i - 1) + count_arr(i);
+  28      END LOOP;
+  29
+  30      FOR i in 1 .. arr.count LOOP
+  31        n := arr.count - i + 1;
+  32        tmp_idx := FLOOR((arr(n) / exp) mod 10) + 1;
+  33        sorted_arr(count_arr(tmp_idx)) := arr(n);
+  34        count_arr(tmp_idx) := count_arr(tmp_idx) - 1;
+  35      END LOOP;
+  36
+  37      RETURN sorted_arr;
+  38    END count_sort_func;
+  39
+  40    /* RADIX SORT */
+  41    FUNCTION radix_sort_func(arr P_TYPES.num_array)
+  42    RETURN P_TYPES.num_array
+  43    IS
+  44    exp pls_integer;
+  45    max_value P_TYPES.num_type;
+  46    sorted_arr P_TYPES.num_array;
+  47    BEGIN
+  48      sorted_arr := P_TYPES.num_array();
+  49      sorted_arr.extend(arr.count);
+  50
+  51      FOR i in 1 .. arr.count LOOP
+  52        sorted_arr(i) := arr(i);
+  53      END LOOP;
+  54
+  55      max_value := P_HELPER_FUNCTIONS.get_max_func(arr);
+  56      exp := 1;
+  57
+  58      WHILE cast(max_value / exp as pls_integer) > 0 LOOP
+  59        sorted_arr := P_RADIX_SORT.count_sort_func(sorted_arr, exp);
+  60        exp := exp * 10;
+  61      END LOOP;
+  62
+  63      RETURN sorted_arr;
+  64      EXCEPTION
+  65        WHEN ACCESS_INTO_NULL OR COLLECTION_IS_NULL THEN
+  66          P_ERROR_HANDLING.log_error_proc();
+  67          RAISE;
+  68    END radix_sort_func;
+  69  END P_RADIX_SORT;
+  70  /
+
+ORA-24344: success with compilation error
+PACKAGE BODY created.
+
+Commit complete.
+
+SQL> /* HELPER FUNCTIONS PACKAGE */
+SQL> CREATE OR REPLACE PACKAGE P_HELPER_FUNCTIONS AS
+  2    FUNCTION generate_data_func(n pls_integer, upTo P_TYPES.num_type) RETURN P_TYPES.num_array;
+  3    FUNCTION get_max_func(arr P_TYPES.num_array) RETURN P_TYPES.num_type;
+  4  END P_HELPER_FUNCTIONS;
+  5  /
+
+PACKAGE created.
+
+Commit complete.
+
+SQL> CREATE OR REPLACE PACKAGE BODY P_HELPER_FUNCTIONS AS
+  2  FUNCTION get_max_func(arr P_TYPES.num_array)
+  3    RETURN P_TYPES.num_type
+  4    IS
+  5    max_value P_TYPES.num_type;
+  6    BEGIN
+  7      max_value := arr(1);
+  8
+  9      FOR i in 1 .. arr.count LOOP
+  10        IF arr(i) > max_value THEN
+  11          max_value := arr(i);
+  12        END IF;
+  13      END LOOP;
+  14
+  15      RETURN max_value;
+  16      EXCEPTION
+  17        WHEN ACCESS_INTO_NULL OR COLLECTION_IS_NULL THEN
+  18          P_ERROR_HANDLING.log_error_proc();
+  19          RAISE;
+  20    END get_max_func;
+  21
+  22  FUNCTION generate_data_func(n pls_integer, upTo P_TYPES.num_type)
+  23    RETURN P_TYPES.num_array
+  24    IS
+  25    arr P_TYPES.num_array;
+  26    BEGIN
+  27      IF n < 1 THEN
+  28          RAISE P_ERROR_HANDLING.INVALID_ARRAY_SIZE;
+  29      ELSIF upTo > 9999 THEN
+  30          RAISE P_ERROR_HANDLING.MAX_VALUE_OVER_LIMIT;
+  31      END IF;
+  32
+  33      arr := P_TYPES.num_array();
+  34      arr.extend(n);
+  35
+  36      FOR i in 1 .. n LOOP
+  37        arr(i) := (abs(DBMS_RANDOM.RANDOM()) mod upTo) + 1;
+  38      END LOOP;
+  39
+  40      RETURN arr;
+  41      EXCEPTION
+  42        WHEN P_ERROR_HANDLING.INVALID_ARRAY_SIZE OR P_ERROR_HANDLING.MAX_VALUE_OVER_LIMIT THEN
+  43          P_ERROR_HANDLING.log_error_proc();
+  44          RAISE;
+  45    END generate_data_func;
+  46  END P_HELPER_FUNCTIONS;
+  47  /
+
+PACKAGE BODY created.
+
+Commit complete.
+
+SQL> SPOOL OFF
+
